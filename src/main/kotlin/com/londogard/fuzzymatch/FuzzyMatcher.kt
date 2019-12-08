@@ -1,37 +1,12 @@
 package com.londogard.fuzzymatch
 
-import java.io.File
 import kotlin.math.min
-import kotlin.system.measureNanoTime
-import kotlin.system.measureTimeMillis
 
-data class RecursiveResult(
-    val matched: Boolean,
-    val score: Int = 0,
-    val matches: List<Int> = emptyList()
-)
+class FuzzyMatcher(private val scoreConfig: ScoreConfig = ScoreConfig()) {
+    data class Result(val indices: List<Int>, val score: Int, val text: String? = null)
+    data class DataHolder(val textLeft: String, val matches: List<Int>, val recursiveResults: List<Result>)
 
-/**
- * Returns true if each character in pattern is found sequentially within text.
- * @param pattern String - the pattern to be found
- */
-fun String.fuzzyMatchSimple(pattern: String): Boolean {
-    var patternIdx = 0
-    var textIdx = 0
-    val patternLen = pattern.length
-    val textLen = length
-    val badPattern = patternLen > textLen || patternLen == 0 || textLen == 0
-
-    while (!badPattern && patternIdx != patternLen && textIdx != textLen) {
-        if (pattern[patternIdx].toLowerCase() == this[textIdx].toLowerCase()) ++patternIdx
-        ++textIdx
-    }
-
-    return !badPattern && patternIdx == patternLen
-}
-
-class FuzzyMatcher(val scoreConfig: ScoreConfig = ScoreConfig()) {
-
+    private val emptyResult = Result(emptyList(), 0)
     /**
      * Returns true if each character in pattern is found sequentially within text. ~3 times faster than contains
      * @param pattern String - the pattern to be found
@@ -51,27 +26,6 @@ class FuzzyMatcher(val scoreConfig: ScoreConfig = ScoreConfig()) {
 
         return patternLen != 0 && textLen != 0 && patternIdx == patternLen
     }
-
-    /**
-     * Does a fuzzy search to find pattern inside a string.
-     * @param {*} pattern string        pattern to search for
-     * @param {*} str     string        string which is being searched
-     * @returns [boolean, number]       a boolean which tells if pattern was
-     *                                  found or not and a search score
-     */
-
-    data class Result(
-        val indices: List<Int>,
-        val score: Int
-    )
-    val emptyResult = Result(emptyList(), 0)
-
-    data class RecursiveParams(
-        val srcMatches: List<Int>, val maxMatches: Int,
-        val recursionCount: Int, val recursionLimit: Int
-    )
-
-    data class DataHolder(val textLeft: String, val matches: List<Int>, val recursiveResults: List<Result>)
 
     fun fuzzyMatchFunc(text: String, pattern: String, res: Result = emptyResult, textLen: Int = text.length, fullText: String = text): Result {
         return when {
@@ -99,10 +53,17 @@ class FuzzyMatcher(val scoreConfig: ScoreConfig = ScoreConfig()) {
                 val results = recursiveParams.recursiveResults + Result(recursiveParams.matches, 10)
 
                 if (results.isEmpty() || recursiveParams.textLeft.isEmpty() && !pattern.last().equals(text.last(), ignoreCase = true)) emptyResult
-                else results.filter { it.score > 0 }.map { Result(it.indices, scoringFunction(it.indices, fullText)) }.maxBy { it.score }!!
+                else results.filter { it.score > 0 }.map { Result(it.indices, scoringFunction(it.indices, fullText)) }.maxBy { it.score }?.copy(text = fullText)!!
             }
         }
     }
+
+    fun fuzzyMatch(texts: List<String>, pattern: String, topN: Int = 20): List<Result> =
+        texts
+            .asSequence()
+            .map { fuzzyMatchFunc(it, pattern) }
+            .sortedByDescending { it.score }
+            .take(topN).toList()
 
     private fun scoringFunction(indices: List<Int>, text: String): Int {
         return listOf(
@@ -118,28 +79,5 @@ class FuzzyMatcher(val scoreConfig: ScoreConfig = ScoreConfig()) {
                 firstLetter + consecutive + camelCase + separator
             }.sum()
         ).sum()
-    }
-}
-
-object a {
-    @JvmStatic
-    fun main(args: Array<String>) {
-        val fuzzy = FuzzyMatcher()
-        val lines = File(javaClass.getResource("/english_355k_words.txt").path).readLines()
-        //val text = "whois this bastard Hello ded hello"
-        val text = "SVisualLoggerLogsList.h"
-        val pattern = "LLL"
-        // 6,7,13 & 17 - we want all permutations of this..!
-        // 6,7,13
-        // 6,13,17
-        // 7,13,17
-        // 6,7,17
-        (1..100).forEach {lines.forEach { fuzzy.fuzzyMatchFunc(it, pattern) }  }
-        println(measureTimeMillis { lines.forEach { fuzzy.fuzzyMatchFunc(it, pattern) } })
-        //println(fuzzy.fuzzyMatchFunc(text, pattern).indices.map { text[it] })
-
-        //println("Fuzzy: ${selfImpl / 1_000_000} ns")
-        //println("FuzzyStrExt: ${selfImpl / 1_000_000} ns")
-        //println("Contains: ${containsImpl / 1_000_000} ns")
     }
 }
