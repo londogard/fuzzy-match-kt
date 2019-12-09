@@ -4,7 +4,7 @@ import kotlin.math.min
 
 class FuzzyMatcher(private val scoreConfig: ScoreConfig = ScoreConfig()) {
     data class Result(val indices: List<Int>, val score: Int, val text: String? = null)
-    data class DataHolder(val textLeft: String, val matches: List<Int>, val recursiveResults: List<Result>)
+    private data class DataHolder(val textLeft: String, val matches: List<Int>, val recursiveResults: List<Result>)
 
     private val emptyResult = Result(emptyList(), 0)
     /**
@@ -27,6 +27,16 @@ class FuzzyMatcher(private val scoreConfig: ScoreConfig = ScoreConfig()) {
         return patternLen != 0 && textLen != 0 && patternIdx == patternLen
     }
 
+    /**
+     * A fuzzy match, finds all possible matches and retrieves the optimal solution using ScoringConfig.
+     * Currently only returns if full match. Else empty result returned.
+     *
+     * @param text: the text input
+     * @param pattern: the pattern we want to match to the text
+     * @param res: recursion param (ignore it)
+     * @param textLen: recursion param (ignore it)
+     * @param fullText: recursion param (ignore it)
+     */
     fun fuzzyMatchFunc(text: String, pattern: String, res: Result = emptyResult, textLen: Int = text.length, fullText: String = text): Result {
         return when {
             pattern.length > text.length || text.isEmpty()-> emptyResult
@@ -58,6 +68,12 @@ class FuzzyMatcher(private val scoreConfig: ScoreConfig = ScoreConfig()) {
         }
     }
 
+    /**
+     * Fuzzy match pattern on a collection of texts. Returns the topN results (scoring by ScoreConfig).
+     * @param texts: The collection of texts.
+     * @param pattern: The pattern to match on the texts
+     * @param topN: Number of results to return
+     */
     fun fuzzyMatch(texts: List<String>, pattern: String, topN: Int = 20): List<Result> =
         texts
             .asSequence()
@@ -68,15 +84,15 @@ class FuzzyMatcher(private val scoreConfig: ScoreConfig = ScoreConfig()) {
     private fun scoringFunction(indices: List<Int>, text: String): Int {
         return listOf(
             min(3, indices[0]) * scoreConfig.unmatchedLeadingLetter,
-            // add unmatched penalty [val unmatched = text.length - nextMatchVar] * scoreConfig.unmatchedLetter
             indices.windowed(2).map { indexWindow ->
                 val firstLetter = if (indexWindow.first() == 0) scoreConfig.firstLetterMatch else 0
                 val consecutive = if (indexWindow.first() == indexWindow.last() - 1) scoreConfig.consecutiveMatch else 0
                 val neighbour = text[indexWindow.first()]
                 val camelCase = if (neighbour.isLowerCase() && text[indexWindow.last()].isUpperCase()) scoreConfig.camelCaseMatch else 0
                 val separator = if (neighbour == ' ' || neighbour == '_') scoreConfig.separatorMatch else 0
+                val unmatched = (text.length - indices.size) * scoreConfig.unmatchedLetter
 
-                firstLetter + consecutive + camelCase + separator
+                firstLetter + consecutive + camelCase + separator + unmatched
             }.sum()
         ).sum()
     }
