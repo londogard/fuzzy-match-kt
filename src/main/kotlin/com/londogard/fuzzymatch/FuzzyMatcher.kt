@@ -62,7 +62,7 @@ class FuzzyMatcher(private val scoreConfig: ScoreConfig = ScoreConfig()) {
                 }
                 val results = recursiveParams.recursiveResults + Result(recursiveParams.matches, 10)
 
-                if (results.isEmpty() || recursiveParams.textLeft.isEmpty() && !pattern.last().equals(text.last(), ignoreCase = true)) emptyResult
+                if (recursiveParams.matches.size != pattern.length) emptyResult
                 else results.filter { it.score > 0 }.map { Result(it.indices, scoringFunction(it.indices, fullText)) }.maxBy { it.score }?.copy(text = fullText)!!
             }
         }
@@ -76,10 +76,10 @@ class FuzzyMatcher(private val scoreConfig: ScoreConfig = ScoreConfig()) {
      */
     fun fuzzyMatch(texts: List<String>, pattern: String, topN: Int = 20): List<Result> =
         texts
-            .asSequence()
             .map { fuzzyMatchFunc(it, pattern) }
+            .filter { it.score > 0 }
             .sortedByDescending { it.score }
-            .take(topN).toList()
+            .take(topN)
 
     private fun scoringFunction(indices: List<Int>, text: String): Int {
         return listOf(
@@ -90,7 +90,7 @@ class FuzzyMatcher(private val scoreConfig: ScoreConfig = ScoreConfig()) {
                 val neighbour = text[indexWindow.first()]
                 val camelCase = if (neighbour.isLowerCase() && text[indexWindow.last()].isUpperCase()) scoreConfig.camelCaseMatch else 0
                 val separator = if (neighbour == ' ' || neighbour == '_') scoreConfig.separatorMatch else 0
-                val unmatched = (text.length - indices.size) * scoreConfig.unmatchedLetter
+                val unmatched = (indices.lastOrNull() ?: text.length) * scoreConfig.unmatchedLetter
 
                 firstLetter + consecutive + camelCase + separator + unmatched
             }.sum()
