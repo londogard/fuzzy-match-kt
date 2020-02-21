@@ -37,33 +37,70 @@ class FuzzyMatcher(private val scoreConfig: ScoreConfig = ScoreConfig()) {
      * @param textLen: recursion param (ignore it)
      * @param fullText: recursion param (ignore it)
      */
-    fun fuzzyMatchFunc(text: String, pattern: String, res: Result = emptyResult, textLen: Int = text.length, fullText: String = text): Result {
+    private fun fuzzyMatchFunc(
+        text: String,
+        pattern: String,
+        res: Result = emptyResult,
+        textLen: Int = text.length,
+        fullText: String = text
+    ): Result {
         return when {
-            pattern.length > text.length || text.isEmpty()-> emptyResult
+            pattern.length > text.length || text.isEmpty() -> emptyResult
             pattern.isEmpty() -> res
             else -> {
-                val recursiveParams = pattern.foldIndexed(DataHolder(text, res.indices, emptyList())) { index, (textLeft, matches, recursiveRes), patternChar ->
+                val recursiveParams = pattern.foldIndexed(
+                    DataHolder(
+                        text,
+                        res.indices,
+                        emptyList()
+                    )
+                ) { index, (textLeft, matches, recursiveRes), patternChar ->
                     when {
                         textLeft.isEmpty() -> return emptyResult
                         patternChar.equals(textLeft[0], true) -> {
-                            val recursiveResult = fuzzyMatchFunc(textLeft.drop(1), pattern.substring(index), res.copy(indices = matches), textLen, fullText)
+                            val recursiveResult = fuzzyMatchFunc(
+                                textLeft.drop(1),
+                                pattern.substring(index),
+                                res.copy(indices = matches),
+                                textLen,
+                                fullText
+                            )
 
-                            DataHolder(textLeft.drop(1), matches + (textLen - textLeft.length), recursiveRes + recursiveResult)
+                            DataHolder(
+                                textLeft.drop(1),
+                                matches + (textLen - textLeft.length),
+                                recursiveRes + recursiveResult
+                            )
                         }
                         else -> {
                             val updatedText = textLeft.dropWhile { !it.equals(patternChar, true) }
                             if (updatedText.isEmpty()) return emptyResult
 
-                            val recursiveResult = fuzzyMatchFunc(updatedText.drop(1), pattern.substring(index), res.copy(indices = matches), textLen, fullText)
+                            val recursiveResult = fuzzyMatchFunc(
+                                updatedText.drop(1),
+                                pattern.substring(index),
+                                res.copy(indices = matches),
+                                textLen,
+                                fullText
+                            )
 
-                            DataHolder(updatedText.drop(1), matches + (textLen - updatedText.length), recursiveRes + recursiveResult)
+                            DataHolder(
+                                updatedText.drop(1),
+                                matches + (textLen - updatedText.length),
+                                recursiveRes + recursiveResult
+                            )
                         }
                     }
                 }
                 val results = recursiveParams.recursiveResults + Result(recursiveParams.matches, 10)
 
                 if (recursiveParams.matches.size != pattern.length) emptyResult
-                else results.filter { it.score > 0 }.map { Result(it.indices, scoringFunction(it.indices, fullText)) }.maxBy { it.score }?.copy(text = fullText)!!
+                else results.filter { it.score > 0 }.map {
+                    Result(
+                        it.indices,
+                        scoringFunction(it.indices, fullText)
+                    )
+                }.maxBy { it.score }?.copy(text = fullText)!!
             }
         }
     }
@@ -75,7 +112,12 @@ class FuzzyMatcher(private val scoreConfig: ScoreConfig = ScoreConfig()) {
      * @param topN: Number of results to return
      */
     fun fuzzyMatch(texts: List<String>, pattern: String, topN: Int = 20): List<Result> =
-        texts
+        if (pattern.length == 1) texts.asSequence()
+            .filter { it.contains(pattern) }
+            .take(topN)
+            .map { match -> Result(listOf(match.indexOf(pattern)), scoreConfig.firstLetterMatch, match) }
+            .toList()
+        else texts
             .map { fuzzyMatchFunc(it, pattern) }
             .filter { it.score > 0 }
             .sortedByDescending { it.score }
@@ -88,7 +130,8 @@ class FuzzyMatcher(private val scoreConfig: ScoreConfig = ScoreConfig()) {
                 val firstLetter = if (indexWindow.first() == 0) scoreConfig.firstLetterMatch else 0
                 val consecutive = if (indexWindow.first() == indexWindow.last() - 1) scoreConfig.consecutiveMatch else 0
                 val neighbour = text[indexWindow.first()]
-                val camelCase = if (neighbour.isLowerCase() && text[indexWindow.last()].isUpperCase()) scoreConfig.camelCaseMatch else 0
+                val camelCase =
+                    if (neighbour.isLowerCase() && text[indexWindow.last()].isUpperCase()) scoreConfig.camelCaseMatch else 0
                 val separator = if (neighbour == ' ' || neighbour == '_') scoreConfig.separatorMatch else 0
                 val unmatched = (indices.lastOrNull() ?: text.length) * scoreConfig.unmatchedLetter
 
