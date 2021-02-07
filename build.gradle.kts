@@ -5,7 +5,7 @@ plugins {
     id("org.jetbrains.dokka") version "0.10.0"
     id("com.github.ben-manes.versions") version "0.27.0"
 
-    kotlin("jvm") version "1.3.60"
+    kotlin("jvm") version "1.4.30"
 }
 
 group = "com.londogard"
